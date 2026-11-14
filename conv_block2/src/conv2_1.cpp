@@ -10,6 +10,31 @@
 typedef ap_uint<72> conv2_1_window_t;
 typedef ap_uint<72 * CONV2_1_IN_C> conv2_1_window_set_t; // Tie all input-channel windows into one packet
 
+// (heewon) 9-tap signed INT8 MAC for one input channel.
+// Each product is 16 bits; the sum of nine products safely fits in 19 signed bits.
+static ap_int<19> conv2_1_mac9(
+    conv2_1_window_t pkt,
+    conv2_weight9_t wpack)
+{
+#pragma HLS INLINE
+
+    ap_int<19> acc = 0;
+
+CONV2_1_MAC9_NARROW:
+    for (int k = 0; k < 9; ++k) {
+#pragma HLS UNROLL
+        const ap_int<8> x =
+            (ap_int<8>)pkt.range(8 * k + 7, 8 * k);
+        const ap_int<8> w =
+            (ap_int<8>)wpack.range(8 * k + 7, 8 * k);
+
+        const ap_int<16> product = x * w;
+        acc += product;
+    }
+
+    return acc;
+}
+
 static int8_t conv2_1_quantize_relu(int32_t acc, int shift) {
 #pragma HLS INLINE
     if (acc <= 0) return (int8_t)0;
@@ -107,7 +132,7 @@ CONV2_1_PACK_ALL:
 
 static void conv2_1_compute(
     hls::stream<conv2_1_window_set_t> &window_sets,
-    const int8_t weights[9][CONV2_1_IN_C * CONV2_1_OUT_C],
+    const conv2_weight9_t weights[CONV2_1_IN_C][CONV2_1_OUT_C],
     const int32_t bias[CONV2_1_OUT_C],
     hls::stream<int8_t> &out_pixels,
     int shift)
@@ -141,7 +166,8 @@ CONV2_1_COMPUTE_OUTPUTS:
         }
 
         // Parallel input-channel computation.
-        int32_t partial[CONV2_1_IN_C];
+        // One 9-tap signed INT8 sum needs 19 signed bits.
+        ap_int<19> partial[CONV2_1_IN_C];
 #pragma HLS ARRAY_PARTITION variable=partial complete dim=1
 
     CONV2_1_INPUT_CHANNELS:
@@ -149,35 +175,24 @@ CONV2_1_COMPUTE_OUTPUTS:
 #pragma HLS UNROLL
 
             const conv2_1_window_t pkt = cached[ic];
-            int32_t channel_sum = 0;
 
-        CONV2_1_MAC_9:
-            for (int k = 0; k < 9; ++k) {
-#pragma HLS UNROLL
+            // One 72-bit read supplies all nine kernel taps.
+            const conv2_weight9_t wpack = weights[ic][oc];
 
-                const ap_uint<8> raw =
-                    pkt.range(8 * k + 7, 8 * k);
-
-                const ap_int<8> x = (ap_int<8>)raw;
-
-                const int32_t w =
-                    (int32_t)weights[k]
-                    [ic * CONV2_1_OUT_C + oc];
-
-                channel_sum += (int32_t)x * w;
-            }
-
-            partial[ic] = channel_sum;
+            partial[ic] = conv2_1_mac9(pkt, wpack);
         }
 
-        // Accumulate all input-channel results.
-        int32_t acc = bias[oc];
+        // 16 input channels * max 9-tap INT8 sum safely fits in 23 signed bits.
+        ap_int<23> channel_total = 0;
 
     CONV2_1_REDUCE:
         for (int ic = 0; ic < CONV2_1_IN_C; ++ic) {
 #pragma HLS UNROLL
-            acc += partial[ic];
+            channel_total += partial[ic];
         }
+
+        // Bias remains INT32, so only the final addition is widened to 32 bits.
+        const int32_t acc = bias[oc] + (int32_t)channel_total;
 
         out_pixels.write(
             conv2_1_quantize_relu(acc, shift)
@@ -189,7 +204,7 @@ CONV2_1_COMPUTE_OUTPUTS:
 
 void conv2_1(
     hls::stream<int8_t> &in_pixels,
-    const int8_t weights[9][CONV2_1_IN_C * CONV2_1_OUT_C],
+    const conv2_weight9_t weights[CONV2_1_IN_C][CONV2_1_OUT_C],
     const int32_t bias[CONV2_1_OUT_C],
     hls::stream<int8_t> &out_pixels,
     int shift)

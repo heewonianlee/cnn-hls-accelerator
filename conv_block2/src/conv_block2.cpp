@@ -28,30 +28,62 @@ WRITE_OUTPUT:
 
 static void load_weights2_1(
     const int8_t weight1[CONV2_1_WEIGHT_SIZE],
-    int8_t w1[9][CONV2_1_IN_C * CONV2_1_OUT_C])
+    conv2_weight9_t w1[CONV2_1_IN_C][CONV2_1_OUT_C])
 {
 #pragma HLS INLINE off
+
+    // External weights remain flat HWIO:
+    // [k][ic][oc]. Pack the nine taps into one 72-bit on-chip word.
 LOAD_W1_K:
     for (int k = 0; k < 9; ++k) {
-    LOAD_W1_CH:
-        for (int j = 0; j < CONV2_1_IN_C * CONV2_1_OUT_C; ++j) {
+    LOAD_W1_IC:
+        for (int ic = 0; ic < CONV2_1_IN_C; ++ic) {
+        LOAD_W1_OC:
+            for (int oc = 0; oc < CONV2_1_OUT_C; ++oc) {
 #pragma HLS PIPELINE II=1
-            w1[k][j] = weight1[k * CONV2_1_IN_C * CONV2_1_OUT_C + j];
+                conv2_weight9_t packed = 0;
+                if (k != 0) {
+                    packed = w1[ic][oc];
+                }
+
+                packed.range(8 * k + 7, 8 * k) =
+                    (ap_uint<8>)((uint8_t)weight1[
+                        (k * CONV2_1_IN_C + ic) * CONV2_1_OUT_C + oc
+                    ]);
+
+                w1[ic][oc] = packed;
+            }
         }
     }
 }
 
 static void load_weights2_2(
     const int8_t weight2[CONV2_2_WEIGHT_SIZE],
-    int8_t w2[9][CONV2_2_IN_C * CONV2_2_OUT_C])
+    conv2_weight9_t w2[CONV2_2_IN_C][CONV2_2_OUT_C])
 {
 #pragma HLS INLINE off
+
+    // External weights remain flat HWIO:
+    // [k][ic][oc]. Pack the nine taps into one 72-bit on-chip word.
 LOAD_W2_K:
     for (int k = 0; k < 9; ++k) {
-    LOAD_W2_CH:
-        for (int j = 0; j < CONV2_2_IN_C * CONV2_2_OUT_C; ++j) {
+    LOAD_W2_IC:
+        for (int ic = 0; ic < CONV2_2_IN_C; ++ic) {
+        LOAD_W2_OC:
+            for (int oc = 0; oc < CONV2_2_OUT_C; ++oc) {
 #pragma HLS PIPELINE II=1
-            w2[k][j] = weight2[k * CONV2_2_IN_C * CONV2_2_OUT_C + j];
+                conv2_weight9_t packed = 0;
+                if (k != 0) {
+                    packed = w2[ic][oc];
+                }
+
+                packed.range(8 * k + 7, 8 * k) =
+                    (ap_uint<8>)((uint8_t)weight2[
+                        (k * CONV2_2_IN_C + ic) * CONV2_2_OUT_C + oc
+                    ]);
+
+                w2[ic][oc] = packed;
+            }
         }
     }
 }
@@ -82,9 +114,9 @@ LOAD_B2:
 
 static void run_block2_pipeline(
     const int8_t input[CONV2_1_INPUT_SIZE],
-    const int8_t w1[9][CONV2_1_IN_C * CONV2_1_OUT_C],
+    const conv2_weight9_t w1[CONV2_1_IN_C][CONV2_1_OUT_C],
     const int32_t b1[CONV2_1_OUT_C],
-    const int8_t w2[9][CONV2_2_IN_C * CONV2_2_OUT_C],
+    const conv2_weight9_t w2[CONV2_2_IN_C][CONV2_2_OUT_C],
     const int32_t b2[CONV2_2_OUT_C],
     int8_t output[BLOCK2_OUTPUT_SIZE],
     int shift1, int shift2)
@@ -135,14 +167,20 @@ void conv_block2(
     // For invalid shifts, do not read or write output.
     if (shift1 < 0 || shift1 > 24 || shift2 < 0 || shift2 > 24) return;
 
-    // Only exact layer-sized weight/bias buffers (no generic MAX arrays).
-    // Nine separate banks permit nine kernel taps to be read concurrently.
-    int8_t w1[9][CONV2_1_IN_C * CONV2_1_OUT_C];
-    int8_t w2[9][CONV2_2_IN_C * CONV2_2_OUT_C];
+    // (heewon) Conv3-style 9-tap packing.
+    // One 72-bit word stores all nine INT8 taps for one (ic, oc).
+    // Partition only the input-channel dimension so every input channel
+    // can still be read in parallel. Keep the oc dimension as memory depth.
+    conv2_weight9_t w1[CONV2_1_IN_C][CONV2_1_OUT_C];
+    conv2_weight9_t w2[CONV2_2_IN_C][CONV2_2_OUT_C];
 #pragma HLS ARRAY_PARTITION variable=w1 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=w2 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=w1 block factor=16 dim=2 // 16 input-channel banks
-#pragma HLS ARRAY_PARTITION variable=w2 block factor=32 dim=2 // 32 input-channel banks
+
+    // Unlike optimized Conv3, keep Block2 weights in LUTRAM because the
+    // integrated CNN is already BRAM-constrained. Packing reduces the
+    // logical banks from 144/288 to 16/32 without consuming more BRAM.
+#pragma HLS BIND_STORAGE variable=w1 type=ram_s2p impl=lutram
+#pragma HLS BIND_STORAGE variable=w2 type=ram_s2p impl=lutram
     int32_t b1[CONV2_1_OUT_C];
     int32_t b2[CONV2_2_OUT_C];
 

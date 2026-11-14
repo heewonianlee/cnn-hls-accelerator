@@ -141,8 +141,13 @@ void conv_block3(
     int8_t w2[9][CONV3_2_IN_C * CONV3_2_OUT_C];
 #pragma HLS ARRAY_PARTITION variable=w1 complete dim=1
 #pragma HLS ARRAY_PARTITION variable=w2 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=w1 block factor=32 dim=2 // (heewon) 32 input-channel banks
-#pragma HLS ARRAY_PARTITION variable=w2 block factor=64 dim=2 // (heewon) 64 input-channel banks
+// Latency setting: 1ms
+//#pragma HLS ARRAY_PARTITION variable=w1 block factor=32 dim=2 // (heewon) 32 input-channel banks
+//#pragma HLS ARRAY_PARTITION variable=w2 block factor=64 dim=2 // (heewon) 64 input-channel banks
+// Latency setting: 2ms
+#pragma HLS ARRAY_PARTITION variable=w1 block factor=16 dim=2 // (heewon) 16 input-channel banks
+#pragma HLS ARRAY_PARTITION variable=w2 block factor=32 dim=2 // (heewon) 32 input-channel banks
+
     int32_t b1[CONV3_1_OUT_C];
     int32_t b2[CONV3_2_OUT_C];
 

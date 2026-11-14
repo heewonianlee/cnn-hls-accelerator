@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <hls_stream.h>
+#include <ap_int.h>
 
 // Dedicated layer sizes. Activation layout: [H][W][C] (HWC).
 // Weights: [3][3][IN_C][OUT_C] (HWIO).
@@ -91,16 +92,20 @@ void conv_block1(
 #define BLOCK2_INPUT_SIZE  CONV2_1_INPUT_SIZE
 #define BLOCK2_OUTPUT_SIZE (POOL2_H * POOL2_W * CONV2_2_OUT_C)
 
+// (heewon) Optimized Block2 packed-weight interface.
+// One 72-bit word contains all nine signed INT8 taps for one (ic, oc).
+typedef ap_uint<72> conv2_weight9_t;
+
 void conv2_1(
     hls::stream<int8_t> &in_pixels,
-    const int8_t weights[9][CONV2_1_IN_C * CONV2_1_OUT_C],
+    const conv2_weight9_t weights[CONV2_1_IN_C][CONV2_1_OUT_C],
     const int32_t bias[CONV2_1_OUT_C],
     hls::stream<int8_t> &out_pixels,
     int shift);
 
 void conv2_2(
     hls::stream<int8_t> &in_pixels,
-    const int8_t weights[9][CONV2_2_IN_C * CONV2_2_OUT_C],
+    const conv2_weight9_t weights[CONV2_2_IN_C][CONV2_2_OUT_C],
     const int32_t bias[CONV2_2_OUT_C],
     hls::stream<int8_t> &out_pixels,
     int shift);

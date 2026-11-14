@@ -3,6 +3,31 @@
 // (heewon) Reuse the existing one-pixel-per-cycle sliding window.
 typedef ap_uint<72> conv1_1_lane2_window_t;
 
+// (heewon) Narrow signed 9-tap INT8 MAC.
+// One INT8xINT8 product is 16 bits; nine products safely fit in 19 signed bits.
+static ap_int<19> conv1_1_lane2_mac9(
+    conv1_1_lane2_window_t window,
+    conv1_weight9_t wpack)
+{
+#pragma HLS INLINE
+
+    ap_int<19> acc = 0;
+
+CONV1_1_MAC9_NARROW:
+    for (int k = 0; k < 9; ++k) {
+#pragma HLS UNROLL
+        const ap_int<8> x =
+            (ap_int<8>)window.range(8 * k + 7, 8 * k);
+        const ap_int<8> w =
+            (ap_int<8>)wpack.range(8 * k + 7, 8 * k);
+
+        const ap_int<16> product = x * w;
+        acc += product;
+    }
+
+    return acc;
+}
+
 static int8_t conv1_1_lane2_quantize_relu(int32_t acc, int shift) {
 #pragma HLS INLINE
     if (acc <= 0) return 0;
@@ -46,7 +71,8 @@ WINDOW_COLS:
                     for (int kw = 0; kw < 3; ++kw) {
 #pragma HLS UNROLL
                         const int bit = 8 * (3 * kh + kw);
-                        packet.range(bit + 7, bit) = (ap_uint<8>)((uint8_t)win[kh][kw]);
+                        packet.range(bit + 7, bit) =
+                            (ap_uint<8>)((uint8_t)win[kh][kw]);
                     }
                 }
                 windows.write(packet);
@@ -57,36 +83,34 @@ WINDOW_COLS:
 
 static void conv1_1_lane2_mac(
     hls::stream<conv1_1_lane2_window_t> &windows,
-    const int8_t weights[9][2][CONV1_1_GROUPS],
+    const conv1_weight9_t weights[2][CONV1_1_GROUPS],
     const int32_t bias[CONV1_1_OUT_C],
     hls::stream<conv1_lane2_t> &out_pixels,
     int shift)
 {
 #pragma HLS INLINE off
-#pragma HLS expression_balance off
 COMPUTE_SPATIAL:
     for (int pixel = 0; pixel < CONV1_1_H * CONV1_1_W; ++pixel) {
         const conv1_1_lane2_window_t window = windows.read();
     COMPUTE_GROUPS:
         for (int g = 0; g < CONV1_1_GROUPS; ++g) {
 #pragma HLS PIPELINE II=1
-            int32_t acc0 = bias[2*g];
-            int32_t acc1 = bias[2*g + 1];
-        MAC9:
-            for (int k = 0; k < 9; ++k) {
-#pragma HLS UNROLL
-                ap_uint<8> raw = window.range(k*8+7, k*8);
-                ap_int<8> x = (ap_int<8>)raw;
-                ap_int<8> w0 = (ap_int<8>)weights[k][0][g];
-                ap_int<8> w1 = (ap_int<8>)weights[k][1][g];
-                ap_int<16> m0 = x*w0;
-                ap_int<16> m1 = x*w1;
-                acc0 += (int32_t)m0;
-                acc1 += (int32_t)m1;
-            }
+            // One 72-bit read per output lane supplies all nine kernel taps.
+            const conv1_weight9_t wpack0 = weights[0][g];
+            const conv1_weight9_t wpack1 = weights[1][g];
+
+            const ap_int<19> mac0 = conv1_1_lane2_mac9(window, wpack0);
+            const ap_int<19> mac1 = conv1_1_lane2_mac9(window, wpack1);
+
+            // Bias remains INT32; only the final addition is widened to 32 bits.
+            const int32_t acc0 = bias[2 * g]     + (int32_t)mac0;
+            const int32_t acc1 = bias[2 * g + 1] + (int32_t)mac1;
+
             conv1_lane2_t pair = 0;
-            pair.range(7,0)  = (ap_uint<8>)(uint8_t)conv1_1_lane2_quantize_relu(acc0, shift);
-            pair.range(15,8) = (ap_uint<8>)(uint8_t)conv1_1_lane2_quantize_relu(acc1, shift);
+            pair.range(7,0) =
+                (ap_uint<8>)(uint8_t)conv1_1_lane2_quantize_relu(acc0, shift);
+            pair.range(15,8) =
+                (ap_uint<8>)(uint8_t)conv1_1_lane2_quantize_relu(acc1, shift);
             out_pixels.write(pair);
         }
     }
@@ -94,7 +118,7 @@ COMPUTE_SPATIAL:
 
 void conv1_1_lane2(
     hls::stream<int8_t> &in_pixels,
-    const int8_t weights[9][2][CONV1_1_GROUPS],
+    const conv1_weight9_t weights[2][CONV1_1_GROUPS],
     const int32_t bias[CONV1_1_OUT_C],
     hls::stream<conv1_lane2_t> &out_pixels,
     int shift)

@@ -25,18 +25,29 @@ CNN_WRITE:
     }
 }
 
-static void cnn_load_w1_1(const int8_t src[CONV1_1_WEIGHT_SIZE],
-              int8_t dst[9][CONV1_1_IN_C * CONV1_1_OUT_C]) {
+// (heewon) Block1 lane2 + 72-bit tap packing.
+// External DDR weights remain flat HWIO; only the on-chip representation changes.
+static void cnn_load_w1_1(
+    const int8_t src[CONV1_1_WEIGHT_SIZE],
+    conv1_weight9_t dst[2][CONV1_1_GROUPS]) {
 #pragma HLS INLINE off
 CNN_LOAD_W1_1_K:
-    for(int k=0;k<9;++k) {
-    CNN_LOAD_W1_1_CHANNELS:
-        for(int j=0;j<CONV1_1_IN_C * CONV1_1_OUT_C;++j) {
+    for (int k=0; k<9; ++k) {
+    CNN_LOAD_W1_1_G:
+        for (int g=0; g<CONV1_1_GROUPS; ++g) {
+        CNN_LOAD_W1_1_L:
+            for (int lane=0; lane<2; ++lane) {
 #pragma HLS PIPELINE II=1
-            dst[k][j]=src[k*CONV1_1_IN_C*CONV1_1_OUT_C+j];
+                conv1_weight9_t packed = 0;
+                if (k != 0) packed = dst[lane][g];
+                packed.range(8*k+7, 8*k) =
+                    (ap_uint<8>)((uint8_t)src[k*CONV1_1_OUT_C + 2*g + lane]);
+                dst[lane][g] = packed;
+            }
         }
     }
 }
+
 static void cnn_load_b1_1(const int32_t src[CONV1_1_OUT_C],
                                  int32_t dst[CONV1_1_OUT_C]) {
 #pragma HLS INLINE off
@@ -47,18 +58,31 @@ CNN_LOAD_B1_1:
     }
 }
 
-static void cnn_load_w1_2(const int8_t src[CONV1_2_WEIGHT_SIZE],
-              int8_t dst[9][CONV1_2_IN_C * CONV1_2_OUT_C]) {
+static void cnn_load_w1_2(
+    const int8_t src[CONV1_2_WEIGHT_SIZE],
+    conv1_weight9_t dst[CONV1_2_IN_C][2][CONV1_2_GROUPS]) {
 #pragma HLS INLINE off
 CNN_LOAD_W1_2_K:
-    for(int k=0;k<9;++k) {
-    CNN_LOAD_W1_2_CHANNELS:
-        for(int j=0;j<CONV1_2_IN_C * CONV1_2_OUT_C;++j) {
+    for (int k=0; k<9; ++k) {
+    CNN_LOAD_W1_2_IC:
+        for (int ic=0; ic<CONV1_2_IN_C; ++ic) {
+        CNN_LOAD_W1_2_G:
+            for (int g=0; g<CONV1_2_GROUPS; ++g) {
+            CNN_LOAD_W1_2_L:
+                for (int lane=0; lane<2; ++lane) {
 #pragma HLS PIPELINE II=1
-            dst[k][j]=src[k*CONV1_2_IN_C*CONV1_2_OUT_C+j];
+                    conv1_weight9_t packed = 0;
+                    if (k != 0) packed = dst[ic][lane][g];
+                    packed.range(8*k+7, 8*k) =
+                        (ap_uint<8>)((uint8_t)src[
+                            (k*CONV1_2_IN_C + ic)*CONV1_2_OUT_C + 2*g + lane]);
+                    dst[ic][lane][g] = packed;
+                }
+            }
         }
     }
 }
+
 static void cnn_load_b1_2(const int32_t src[CONV1_2_OUT_C],
                                  int32_t dst[CONV1_2_OUT_C]) {
 #pragma HLS INLINE off
@@ -69,15 +93,25 @@ CNN_LOAD_B1_2:
     }
 }
 
-static void cnn_load_w2_1(const int8_t src[CONV2_1_WEIGHT_SIZE],
-              int8_t dst[9][CONV2_1_IN_C * CONV2_1_OUT_C]) {
+// (heewon) Block2 72-bit tap packing. One word stores all 9 INT8 taps for (ic, oc).
+static void cnn_load_w2_1(
+    const int8_t src[CONV2_1_WEIGHT_SIZE],
+    conv2_weight9_t dst[CONV2_1_IN_C][CONV2_1_OUT_C]) {
 #pragma HLS INLINE off
 CNN_LOAD_W2_1_K:
-    for(int k=0;k<9;++k) {
-    CNN_LOAD_W2_1_CHANNELS:
-        for(int j=0;j<CONV2_1_IN_C * CONV2_1_OUT_C;++j) {
+    for (int k=0; k<9; ++k) {
+    CNN_LOAD_W2_1_IC:
+        for (int ic=0; ic<CONV2_1_IN_C; ++ic) {
+        CNN_LOAD_W2_1_OC:
+            for (int oc=0; oc<CONV2_1_OUT_C; ++oc) {
 #pragma HLS PIPELINE II=1
-            dst[k][j]=src[k*CONV2_1_IN_C*CONV2_1_OUT_C+j];
+                conv2_weight9_t packed = 0;
+                if (k != 0) packed = dst[ic][oc];
+                packed.range(8*k+7, 8*k) =
+                    (ap_uint<8>)((uint8_t)src[
+                        (k*CONV2_1_IN_C + ic)*CONV2_1_OUT_C + oc]);
+                dst[ic][oc] = packed;
+            }
         }
     }
 }
@@ -91,15 +125,24 @@ CNN_LOAD_B2_1:
     }
 }
 
-static void cnn_load_w2_2(const int8_t src[CONV2_2_WEIGHT_SIZE],
-              int8_t dst[9][CONV2_2_IN_C * CONV2_2_OUT_C]) {
+static void cnn_load_w2_2(
+    const int8_t src[CONV2_2_WEIGHT_SIZE],
+    conv2_weight9_t dst[CONV2_2_IN_C][CONV2_2_OUT_C]) {
 #pragma HLS INLINE off
 CNN_LOAD_W2_2_K:
-    for(int k=0;k<9;++k) {
-    CNN_LOAD_W2_2_CHANNELS:
-        for(int j=0;j<CONV2_2_IN_C * CONV2_2_OUT_C;++j) {
+    for (int k=0; k<9; ++k) {
+    CNN_LOAD_W2_2_IC:
+        for (int ic=0; ic<CONV2_2_IN_C; ++ic) {
+        CNN_LOAD_W2_2_OC:
+            for (int oc=0; oc<CONV2_2_OUT_C; ++oc) {
 #pragma HLS PIPELINE II=1
-            dst[k][j]=src[k*CONV2_2_IN_C*CONV2_2_OUT_C+j];
+                conv2_weight9_t packed = 0;
+                if (k != 0) packed = dst[ic][oc];
+                packed.range(8*k+7, 8*k) =
+                    (ap_uint<8>)((uint8_t)src[
+                        (k*CONV2_2_IN_C + ic)*CONV2_2_OUT_C + oc]);
+                dst[ic][oc] = packed;
+            }
         }
     }
 }
@@ -113,18 +156,40 @@ CNN_LOAD_B2_2:
     }
 }
 
-static void cnn_load_w3_1(const int8_t src[CONV3_1_WEIGHT_SIZE],
-              int8_t dst[9][CONV3_1_IN_C * CONV3_1_OUT_C]) {
+
+static void cnn_load_w3_1(
+    const int8_t src[CONV3_1_WEIGHT_SIZE],
+    conv3_weight9_t dst[16][2 * CONV3_1_OUT_C]) {
 #pragma HLS INLINE off
+
+// (heewon) Keep the external HWIO layout unchanged, but pack all nine
+// 3x3 INT8 taps for one (lane, phase, output-channel) tuple into 72 bits.
 CNN_LOAD_W3_1_K:
-    for(int k=0;k<9;++k) {
-    CNN_LOAD_W3_1_CHANNELS:
-        for(int j=0;j<CONV3_1_IN_C * CONV3_1_OUT_C;++j) {
+    for (int k = 0; k < 9; ++k) {
+    CNN_LOAD_W3_1_IC:
+        for (int ic = 0; ic < CONV3_1_IN_C; ++ic) {
+        CNN_LOAD_W3_1_OC:
+            for (int oc = 0; oc < CONV3_1_OUT_C; ++oc) {
 #pragma HLS PIPELINE II=1
-            dst[k][j]=src[k*CONV3_1_IN_C*CONV3_1_OUT_C+j];
+                const int lane = ic & 15;
+                const int phase = ic >> 4;
+                const int addr = phase * CONV3_1_OUT_C + oc;
+
+                conv3_weight9_t packed = 0;
+                if (k != 0) {
+                    packed = dst[lane][addr];
+                }
+
+                packed.range(8 * k + 7, 8 * k) =
+                    (ap_uint<8>)((uint8_t)
+                        src[(k * CONV3_1_IN_C + ic) * CONV3_1_OUT_C + oc]);
+
+                dst[lane][addr] = packed;
+            }
         }
     }
 }
+
 static void cnn_load_b3_1(const int32_t src[CONV3_1_OUT_C],
                                  int32_t dst[CONV3_1_OUT_C]) {
 #pragma HLS INLINE off
@@ -135,18 +200,40 @@ CNN_LOAD_B3_1:
     }
 }
 
-static void cnn_load_w3_2(const int8_t src[CONV3_2_WEIGHT_SIZE],
-              int8_t dst[9][CONV3_2_IN_C * CONV3_2_OUT_C]) {
+// (heewon) Conv3-2: 32 lanes, 2 phases, external input remains flat HWIO.
+static void cnn_load_w3_2(
+    const int8_t src[CONV3_2_WEIGHT_SIZE],
+    conv3_weight9_t dst[32][2 * CONV3_2_OUT_C]) {
 #pragma HLS INLINE off
+
+// (heewon) 32 lanes x 2 phases. External HWIO stays flat; only the
+// on-chip representation changes to one 72-bit word per 3x3 kernel.
 CNN_LOAD_W3_2_K:
-    for(int k=0;k<9;++k) {
-    CNN_LOAD_W3_2_CHANNELS:
-        for(int j=0;j<CONV3_2_IN_C * CONV3_2_OUT_C;++j) {
+    for (int k = 0; k < 9; ++k) {
+    CNN_LOAD_W3_2_IC:
+        for (int ic = 0; ic < CONV3_2_IN_C; ++ic) {
+        CNN_LOAD_W3_2_OC:
+            for (int oc = 0; oc < CONV3_2_OUT_C; ++oc) {
 #pragma HLS PIPELINE II=1
-            dst[k][j]=src[k*CONV3_2_IN_C*CONV3_2_OUT_C+j];
+                const int lane = ic & 31;
+                const int phase = ic >> 5;
+                const int addr = phase * CONV3_2_OUT_C + oc;
+
+                conv3_weight9_t packed = 0;
+                if (k != 0) {
+                    packed = dst[lane][addr];
+                }
+
+                packed.range(8 * k + 7, 8 * k) =
+                    (ap_uint<8>)((uint8_t)
+                        src[(k * CONV3_2_IN_C + ic) * CONV3_2_OUT_C + oc]);
+
+                dst[lane][addr] = packed;
+            }
         }
     }
 }
+
 static void cnn_load_b3_2(const int32_t src[CONV3_2_OUT_C],
                                  int32_t dst[CONV3_2_OUT_C]) {
 #pragma HLS INLINE off
@@ -193,19 +280,37 @@ CNN_LOAD_B_fc2:
     }
 }
 
+// (heewon) Conv1 packs two HWC channels into 16-bit beats; Conv2 expects
+// one INT8 channel per beat. Preserve HWC order and release one INT8/cycle.
+static void cnn_unpack_pool1_lane2(
+    hls::stream<conv1_lane2_t> &in_packed,
+    hls::stream<int8_t> &out_scalar) {
+#pragma HLS INLINE off
+    conv1_lane2_t word = 0;
+CNN_UNPACK_POOL1:
+    for (int i=0; i<BLOCK1_OUTPUT_SIZE; ++i) {
+#pragma HLS PIPELINE II=1
+        if ((i & 1) == 0) word = in_packed.read();
+        const ap_int<8> v = ((i & 1) == 0)
+            ? (ap_int<8>)word.range(7, 0)
+            : (ap_int<8>)word.range(15, 8);
+        out_scalar.write((int8_t)v);
+    }
+}
+
 static void cnn_pipeline(
     const int8_t input[CNN_INPUT_SIZE],
-    const int8_t w1_1[9][CONV1_1_IN_C * CONV1_1_OUT_C],
+    const conv1_weight9_t w1_1[2][CONV1_1_GROUPS],
     const int32_t b1_1[CONV1_1_OUT_C],
-    const int8_t w1_2[9][CONV1_2_IN_C * CONV1_2_OUT_C],
+    const conv1_weight9_t w1_2[CONV1_2_IN_C][2][CONV1_2_GROUPS],
     const int32_t b1_2[CONV1_2_OUT_C],
-    const int8_t w2_1[9][CONV2_1_IN_C * CONV2_1_OUT_C],
+    const conv2_weight9_t w2_1[CONV2_1_IN_C][CONV2_1_OUT_C],
     const int32_t b2_1[CONV2_1_OUT_C],
-    const int8_t w2_2[9][CONV2_2_IN_C * CONV2_2_OUT_C],
+    const conv2_weight9_t w2_2[CONV2_2_IN_C][CONV2_2_OUT_C],
     const int32_t b2_2[CONV2_2_OUT_C],
-    const int8_t w3_1[9][CONV3_1_IN_C * CONV3_1_OUT_C],
+    const conv3_weight9_t w3_1[16][2 * CONV3_1_OUT_C],
     const int32_t b3_1[CONV3_1_OUT_C],
-    const int8_t w3_2[9][CONV3_2_IN_C * CONV3_2_OUT_C],
+    const conv3_weight9_t w3_2[32][2 * CONV3_2_OUT_C],
     const int32_t b3_2[CONV3_2_OUT_C],
     const int8_t w_fc1[HEAD_FC1_WEIGHT_SIZE],
     const int32_t b_fc1[HEAD_FC1_OUT_C],
@@ -222,9 +327,10 @@ static void cnn_pipeline(
 #pragma HLS INLINE off
 #pragma HLS DATAFLOW
     hls::stream<int8_t> in_stream("cnn_in");
-    hls::stream<int8_t> s_c11("cnn_c11");
-    hls::stream<int8_t> s_c12("cnn_c12");
-    hls::stream<int8_t> s_pool1("cnn_pool1");
+    hls::stream<conv1_lane2_t> s_c11("cnn_c11_lane2");
+    hls::stream<conv1_lane2_t> s_c12("cnn_c12_lane2");
+    hls::stream<conv1_lane2_t> s_pool1_packed("cnn_pool1_lane2");
+    hls::stream<int8_t> s_pool1("cnn_pool1_unpacked");
     hls::stream<int8_t> s_c21("cnn_c21");
     hls::stream<int8_t> s_c22("cnn_c22");
     hls::stream<int8_t> s_pool2("cnn_pool2");
@@ -232,26 +338,28 @@ static void cnn_pipeline(
     hls::stream<int8_t> s_c32("cnn_c32");
     hls::stream<int8_t> s_pool3("cnn_pool3");
     hls::stream<int32_t> scores("cnn_logits");
-#pragma HLS STREAM variable=in_stream depth=64
-#pragma HLS STREAM variable=s_c11 depth=64
-#pragma HLS STREAM variable=s_c12 depth=64
-#pragma HLS STREAM variable=s_pool1 depth=64
-#pragma HLS STREAM variable=s_c21 depth=64
-#pragma HLS STREAM variable=s_c22 depth=64
-#pragma HLS STREAM variable=s_pool2 depth=64
-#pragma HLS STREAM variable=s_c31 depth=64
-#pragma HLS STREAM variable=s_c32 depth=64
-#pragma HLS STREAM variable=s_pool3 depth=64
+#pragma HLS STREAM variable=in_stream depth=16
+#pragma HLS STREAM variable=s_c11 depth=16
+#pragma HLS STREAM variable=s_c12 depth=16
+#pragma HLS STREAM variable=s_pool1_packed depth=16
+#pragma HLS STREAM variable=s_pool1 depth=16
+#pragma HLS STREAM variable=s_c21 depth=16
+#pragma HLS STREAM variable=s_c22 depth=16
+#pragma HLS STREAM variable=s_pool2 depth=16
+#pragma HLS STREAM variable=s_c31 depth=16
+#pragma HLS STREAM variable=s_c32 depth=16
+#pragma HLS STREAM variable=s_pool3 depth=16
 #pragma HLS STREAM variable=scores depth=2
     cnn_read_input(input, in_stream);
-    conv1_1(in_stream, w1_1, b1_1, s_c11, shift1_1);
-    conv1_2(s_c11, w1_2, b1_2, s_c12, shift1_2);
-    maxpool1(s_c12, s_pool1);
+    conv1_1_lane2(in_stream, w1_1, b1_1, s_c11, shift1_1);
+    conv1_2_lane2(s_c11, w1_2, b1_2, s_c12, shift1_2);
+    maxpool1_lane2(s_c12, s_pool1_packed);
+    cnn_unpack_pool1_lane2(s_pool1_packed, s_pool1);
     conv2_1(s_pool1, w2_1, b2_1, s_c21, shift2_1);
     conv2_2(s_c21, w2_2, b2_2, s_c22, shift2_2);
     maxpool2(s_c22, s_pool2);
-    conv3_1(s_pool2, w3_1, b3_1, s_c31, shift3_1);
-    conv3_2(s_c31, w3_2, b3_2, s_c32, shift3_2);
+    conv3_1_reuse16(s_pool2, w3_1, b3_1, s_c31, shift3_1);
+    conv3_2_reuse32(s_c31, w3_2, b3_2, s_c32, shift3_2);
     maxpool3(s_c32, s_pool3);
     classification_head_stream(s_pool3, w_fc1, b_fc1, w_fc2, b_fc2,
                                scores, shift_fc1);
@@ -277,7 +385,7 @@ void cnn(
     const int8_t weight_fc2[HEAD_FC2_WEIGHT_SIZE],
     const int32_t bias_fc2[HEAD_FC2_OUT_C],
     int32_t logits[CNN_OUTPUT_SIZE],
-int shift1_1, int shift1_2,
+    int shift1_1, int shift1_2,
     int shift2_1, int shift2_2,
     int shift3_1, int shift3_2,
     int shift_fc1) {
@@ -333,28 +441,46 @@ int shift1_1, int shift1_2,
         shift3_1 < 0 || shift3_1 > 24 ||
         shift3_2 < 0 || shift3_2 > 24 ||
         shift_fc1 < 0 || shift_fc1 > 24) return;
-    int8_t w1_1[9][CONV1_1_IN_C * CONV1_1_OUT_C];
+    // (heewon) Block1 final: 72-bit packed 3x3 taps + lane2 parallelism.
+    // Keep packed weights in LUTRAM to avoid increasing BRAM pressure.
+    conv1_weight9_t w1_1[2][CONV1_1_GROUPS];
 #pragma HLS ARRAY_PARTITION variable=w1_1 complete dim=1
+#pragma HLS BIND_STORAGE variable=w1_1 type=ram_s2p impl=lutram
     int32_t b1_1[CONV1_1_OUT_C];
-    int8_t w1_2[9][CONV1_2_IN_C * CONV1_2_OUT_C];
+#pragma HLS ARRAY_PARTITION variable=b1_1 complete dim=1
+
+    conv1_weight9_t w1_2[CONV1_2_IN_C][2][CONV1_2_GROUPS];
 #pragma HLS ARRAY_PARTITION variable=w1_2 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=w1_2 block factor=16 dim=2
+#pragma HLS ARRAY_PARTITION variable=w1_2 complete dim=2
+#pragma HLS BIND_STORAGE variable=w1_2 type=ram_s2p impl=lutram
     int32_t b1_2[CONV1_2_OUT_C];
-    int8_t w2_1[9][CONV2_1_IN_C * CONV2_1_OUT_C];
+#pragma HLS ARRAY_PARTITION variable=b1_2 complete dim=1
+
+    // (heewon) Block2 final: 72-bit packed 3x3 taps. Input channels remain
+    // fully banked for parallel MACs; output channels remain memory depth.
+    conv2_weight9_t w2_1[CONV2_1_IN_C][CONV2_1_OUT_C];
 #pragma HLS ARRAY_PARTITION variable=w2_1 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=w2_1 block factor=16 dim=2
+#pragma HLS BIND_STORAGE variable=w2_1 type=ram_s2p impl=lutram
     int32_t b2_1[CONV2_1_OUT_C];
-    int8_t w2_2[9][CONV2_2_IN_C * CONV2_2_OUT_C];
+
+    conv2_weight9_t w2_2[CONV2_2_IN_C][CONV2_2_OUT_C];
 #pragma HLS ARRAY_PARTITION variable=w2_2 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=w2_2 block factor=32 dim=2
+#pragma HLS BIND_STORAGE variable=w2_2 type=ram_s2p impl=lutram
     int32_t b2_2[CONV2_2_OUT_C];
-    int8_t w3_1[9][CONV3_1_IN_C * CONV3_1_OUT_C];
+
+    // (heewon) Block3 final: 72-bit packed weights + reuse16/32, validated standalone.
+    // Conv3-1: 9x16 tiny banks -> 16 x 72-bit BRAM banks.
+    // Conv3-2: 9x32 tiny banks -> 32 x 72-bit BRAM banks.
+    conv3_weight9_t w3_1[16][2 * CONV3_1_OUT_C];
 #pragma HLS ARRAY_PARTITION variable=w3_1 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=w3_1 block factor=32 dim=2
+#pragma HLS BIND_STORAGE variable=w3_1 type=ram_s2p impl=bram
+
     int32_t b3_1[CONV3_1_OUT_C];
-    int8_t w3_2[9][CONV3_2_IN_C * CONV3_2_OUT_C];
+
+    conv3_weight9_t w3_2[32][2 * CONV3_2_OUT_C];
 #pragma HLS ARRAY_PARTITION variable=w3_2 complete dim=1
-#pragma HLS ARRAY_PARTITION variable=w3_2 block factor=64 dim=2
+#pragma HLS BIND_STORAGE variable=w3_2 type=ram_s2p impl=bram
+
     int32_t b3_2[CONV3_2_OUT_C];
     int8_t w_fc1[HEAD_FC1_WEIGHT_SIZE];
     int8_t w_fc2[HEAD_FC2_WEIGHT_SIZE];

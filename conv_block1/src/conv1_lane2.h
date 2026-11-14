@@ -1,4 +1,3 @@
-
 #ifndef CONV1_LANE2_H
 #define CONV1_LANE2_H
 
@@ -9,8 +8,12 @@
 #include <ap_int.h>
 #include "conv2d.h"
 
-// Two INT8 channels packed into 16 bits
+// Two INT8 channels packed into 16 bits.
 typedef ap_uint<16> conv1_lane2_t;
+
+// (heewon) Same 9-tap packed-weight representation used in optimized Block2/3.
+// One 72-bit word contains all nine signed INT8 kernel taps.
+typedef ap_uint<72> conv1_weight9_t;
 
 #define CONV1_LANE_COUNT 2
 #define CONV1_1_GROUPS (CONV1_1_OUT_C / CONV1_LANE_COUNT)
@@ -24,14 +27,14 @@ typedef ap_uint<16> conv1_lane2_t;
 
 void conv1_1_lane2(
     hls::stream<int8_t> &in_pixels,
-    const int8_t weights[9][2][CONV1_1_GROUPS],
+    const conv1_weight9_t weights[2][CONV1_1_GROUPS],
     const int32_t bias[CONV1_1_OUT_C],
     hls::stream<conv1_lane2_t> &out_pixels,
     int shift);
 
 void conv1_2_lane2(
     hls::stream<conv1_lane2_t> &in_pixels,
-    const int8_t weights[9][CONV1_2_IN_C][2][CONV1_2_GROUPS],
+    const conv1_weight9_t weights[CONV1_2_IN_C][2][CONV1_2_GROUPS],
     const int32_t bias[CONV1_2_OUT_C],
     hls::stream<conv1_lane2_t> &out_pixels,
     int shift);

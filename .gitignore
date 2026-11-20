@@ -1,0 +1,42 @@
+# ==========================================
+# Vitis HLS Generated Files
+# ==========================================
+**/solution*/
+**/.apc/
+**/.settings/
+**/.Xil/
+**/.cache/
+
+**/.project
+**/.cproject
+**/.vitis_hls_log_all.xml
+**/hls.app
+
+# ==========================================
+# Vivado Generated Files
+# ==========================================
+**/*.runs/
+**/*.cache/
+**/*.gen/
+**/*.sim/
+**/*.hw/
+**/*.ip_user_files/
+**/.Xil/
+
+# ==========================================
+# Logs and Temporary Files
+# ==========================================
+*.log
+*.jou
+*.pb
+*.str
+*.dcp
+*.bit
+*.wdb
+*.wcfg
+*.o
+*.obj
+*.exe
+
+# Temporary exports
+export.zip

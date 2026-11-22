@@ -141,6 +141,7 @@ The final system separates dynamic input/output data from fixed CNN parameters.
                   /   \                    |
              Input   Logits        Weights / Biases
 ```
+*PS S_AXI_HP0_FPD is PS side AXI Slave port
 
 ### DDR
 

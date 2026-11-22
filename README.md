@@ -193,29 +193,37 @@ This removes the need to initialize all CNN parameters through DDR during simula
 The full-system testbench performs the following sequence:
 
 ```text
-1. Initialize CNN weights and biases in BRAM using COE
+1. Pre-initialize CNN weights and biases in BRAM using all_weights.coe
                         ↓
-2. Initialize CNN input data in DDR
+2. Initialize CNN input data in DDR using deterministic test vectors
                         ↓
-3. Initialize output memory
+3. Clear the DDR output region for logits
                         ↓
-4. Configure CNN AXI-Lite control registers
+4. Configure CNN AXI-Lite registers
+   - Input pointer
+   - Weight / bias pointers
+   - Output logits pointer
+   - Quantization shift values
                         ↓
-5. Set memory addresses for input, weights, biases, and logits
+5. Read back selected AXI-Lite registers to verify address configuration
                         ↓
-6. Start CNN accelerator
+6. Assert ap_start to start the CNN accelerator
                         ↓
-7. CNN reads input data from DDR
+7. CNN reads input feature data from DDR
                         ↓
-8. CNN reads weights and biases from BRAM
+8. CNN reads pre-initialized weights and biases from BRAM
                         ↓
-9. CNN performs inference
+9. CNN performs inference through the complete CNN pipeline
                         ↓
-10. Output logits are written to DDR
+10. CNN writes the two output logits to DDR through AXI
                         ↓
-11. Testbench reads the generated logits
+11. Monitor CNN-side and PS S_AXI_HP0_FPD-side AXI write transactions
                         ↓
-12. Compare RTL outputs with CPU golden values
+12. Compare the captured output logits with the CPU golden values
+                        ↓
+13. Read the DDR output region as an additional diagnostic check
+                        ↓
+14. Report CNN output verification and per-layer/phase timing results
 ```
 
 ---

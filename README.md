@@ -10,8 +10,7 @@ The final CNN accelerator was developed and verified through two main stages: **
 
 - CNN implementation in C/C++
 - Functional verification using C Simulation
-- RTL verification using C/RTL Co-simulation
-- Architecture and resource optimization
+- Resource optimization
 - Export of the optimized CNN accelerator as a Vivado IP
 
 ### Vivado
@@ -20,7 +19,6 @@ The final CNN accelerator was developed and verified through two main stages: **
 - AXI-based memory interface construction
 - DDR-based input/output storage
 - BRAM-based weight and bias storage
-- Full-system behavioral simulation
 - AXI transaction and output verification
 
 ### Final Verification Flow

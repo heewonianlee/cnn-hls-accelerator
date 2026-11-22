@@ -94,7 +94,7 @@ The current design is primarily constrained by **DSP utilization**, which reache
 
 ### HLS Verification
 
-The CNN implementation was first verified at the HLS level before being integrated into the complete Vivado system.
+The CNN implementation was first verified at the HLS level.
 
 Verification stages:
 
@@ -103,7 +103,7 @@ Verification stages:
   - Compared generated CNN outputs with CPU reference values
 
 - **C/RTL Co-simulation**
-  - Verified that the synthesized RTL implementation maintained the same functionality as the C model
+  - On Vivado, testbench
 
 - **FPGA Board Verification**
   - Planned as future work

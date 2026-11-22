@@ -1,4 +1,4 @@
-# Final Optimization and Verification
+# CNN Accelerator
 
 ## 1. Final System Architecture
 

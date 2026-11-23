@@ -280,6 +280,7 @@ KV260 Board Deployment (X)
 ---
 
 ## 9. Performance
+
 ### Dataflow vs Computation
 | Phase | Cycle | Latency | Percentage |
 |---|---:|---:|---:|
@@ -287,13 +288,7 @@ KV260 Board Deployment (X)
 | Weight·Bias Load | 343,420 | 3.43420 ms | 57.53% |
 | Computation | 253,502 | 2.53502 ms | 42.47% |
 
-The CNN is implemented as a streaming `DATAFLOW` pipeline.  
-Therefore, the elapsed time reported for each layer includes both computation time and time spent waiting for upstream data.
-
-> **Note:** The values below should not be interpreted as standalone per-layer execution latency because multiple layers execute concurrently.
-
-At **100 MHz**, one clock cycle corresponds to **10 ns**.
-
+### Latency for Layers
 | Layer | Completion Cycles | Completion Time (ms) | Δ Cycles from Previous Completion | Δ Time (µs) |
 |---|---:|---:|---:|---:|
 | Conv1_1 | 244,124 | 2.44124 | - | - |
@@ -308,6 +303,38 @@ At **100 MHz**, one clock cycle corresponds to **10 ns**.
 | GlobalAvgPool | 253,350 | 2.53350 | +69 | +0.69 |
 | FC1 | 253,429 | 2.53429 | +79 | +0.79 |
 | FC2 | 253,444 | **2.53444** | +15 | +0.15 |
+
+### Comparison (HLS Estimation and Vivado RTL Simulation)
+| Phase | HLS Estimate | Vivado RTL Measurement | Difference | RTL / HLS |
+|---|---:|---:|---:|---:|
+| **Total CNN** | 296,282 cycles · 2.963 ms | 596,926 cycles · 5.969 ms | **+300,644 cycles · +3.006 ms** | **2.01×** |
+| Weight / Bias Loading | 76,266 cycles · 0.763 ms | 343,420 cycles · 3.434 ms | **+267,154 cycles · +2.672 ms** | **4.50×** |
+| DATAFLOW Pipeline | 219,983 cycles · 2.200 ms | 253,502 cycles · 2.535 ms | +33,519 cycles · +0.335 ms | 1.15× |
+
+### Final Comparison
+| Implementation | Architecture | Clock | Latency | Relative to DPU |
+|---|---|---:|---:|---:|
+| **Reference Paper** | DPUCZDX8G B4096 | 300 MHz | **0.876 ms** | **1.00×** |
+| Custom CNN - HLS Estimate | Vitis HLS Accelerator | 100 MHz | 2.963 ms | 3.38× |
+| **Custom CNN - RTL DATAFLOW** | Vitis HLS Accelerator | 100 MHz | **2.535 ms** | **2.89×** |
+| Custom CNN - Full RTL | HLS + AXI + Memory System | 100 MHz | 5.969 ms | 6.81× |
+
+But when it comes to cycles... Our custom hardware is better.
+| Implementation | Clock | Latency | Approx. Cycles |
+|---|---:|---:|---:|
+| Reference DPU B4096 | 300 MHz | **0.876 ms** | ~262,800* |
+| **Custom RTL DATAFLOW** | 100 MHz | **2.535 ms** | **253,502** |
+
+So, final comparison is... 
+| Platform | Implementation | Precision | Clock | Latency | Throughput |
+|---|---|---|---:|---:|---:|
+| ARM Cortex-A53 | Reference CPU | FP32 | - | 6.470 ms | 154.6 FPS |
+| ARM Cortex-A53 | Reference CPU | INT8 | - | 6.380 ms | 156.7 FPS |
+| **Kria KV260** | **Reference DPU B4096** | **INT8** | **300 MHz** | **0.876 ms** | **1140+ FPS** |
+| **Kria KV260** | **Custom HLS RTL DATAFLOW** | **INT8** | **100 MHz** | **2.535 ms** | ~394 FPS* |
+| **Kria KV260** | **Custom Full RTL** | **INT8** | **100 MHz** | **5.969 ms** | ~168 FPS* |
+
+Therefore, the current primary optimization target is the **weight / bias loading path**, followed by improving the achievable operating frequency of the custom accelerator.
 
 ### Block-Level Summary
 

@@ -336,49 +336,6 @@ So, final comparison is...
 
 Therefore, the current primary optimization target is the **weight / bias loading path**, followed by improving the achievable operating frequency of the custom accelerator.
 
-### Block-Level Summary
-
-| Block | Final Stage | Completion Time | Additional Pipeline Tail |
-|---|---|---:|---:|
-| Conv Block 1 | MaxPool1 | 2.44943 ms | ~8.19 µs after Conv1_1 |
-| Conv Block 2 | MaxPool2 | 2.47812 ms | ~28.69 µs after Block 1 |
-| Conv Block 3 | MaxPool3 | 2.53281 ms | ~54.69 µs after Block 2 |
-| Classification Head | FC2 | **2.53444 ms** | ~1.63 µs after Block 3 |
-
-### Interpretation
-
-- The complete CNN streaming pipeline finishes after **253,444 cycles**, corresponding to approximately **2.534 ms** at 100 MHz.
-- Because the CNN uses HLS `DATAFLOW`, the reported timing of each layer represents its **completion point within overlapped execution**, not isolated computation latency.
-- The largest increases in the pipeline tail occur around:
-  - **Conv3_1:** +3,151 cycles
-  - **Conv3_2:** +2,319 cycles
-  - **Conv2_1:** +1,448 cycles
-  - **Conv2_2:** +1,344 cycles
-- **Conv Block 3** contributes the largest increase to the final pipeline completion time.
-- Pooling and fully connected stages contribute relatively little additional latency near the end of the pipeline.
-- `MaxPool3` is reported one cycle earlier than `Conv3_2`. This should be treated as effectively simultaneous completion due to DATAFLOW process timing and monitoring behavior rather than as MaxPool3 completing computation before Conv3_2.
-
-### Overall Pipeline Latency
-
-```text
-CNN Pipeline Start
-        ↓
-Conv Block 1
-        ↓
-Conv Block 2
-        ↓
-Conv Block 3
-        ↓
-Global Average Pooling
-        ↓
-FC1
-        ↓
-FC2
-        ↓
-253,444 cycles
-≈ 2.534 ms @ 100 MHz
-```
-
 ## 10. Future Work
 
 The next steps of the project include:

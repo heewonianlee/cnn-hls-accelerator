@@ -280,7 +280,12 @@ KV260 Board Deployment (X)
 ---
 
 ## 9. Performance
-## Layer-Level Timing
+### Dataflow vs Computation
+| Phase | Cycle | Latency | Percentage |
+|---|---:|---:|---:|
+| **CNN** (`ap_start` → `ap_done`) | **596,926** | **5.96926 ms** | **100%** |
+| Weight·Bias Load | 343,420 | 3.43420 ms | 57.53% |
+| Computation | 253,502 | 2.53502 ms | 42.47% |
 
 The CNN is implemented as a streaming `DATAFLOW` pipeline.  
 Therefore, the elapsed time reported for each layer includes both computation time and time spent waiting for upstream data.

@@ -278,6 +278,74 @@ KV260 Board Deployment (X)
 
 ---
 
+## 9. Performance
+## Layer-Level Timing
+
+The CNN is implemented as a streaming `DATAFLOW` pipeline.  
+Therefore, the elapsed time reported for each layer includes both computation time and time spent waiting for upstream data.
+
+> **Note:** The values below should not be interpreted as standalone per-layer execution latency because multiple layers execute concurrently.
+
+At **100 MHz**, one clock cycle corresponds to **10 ns**.
+
+| Layer | Completion Cycles | Completion Time (ms) | Δ Cycles from Previous Completion | Δ Time (µs) |
+|---|---:|---:|---:|---:|
+| Conv1_1 | 244,124 | 2.44124 | - | - |
+| Conv1_2 | 244,914 | 2.44914 | +790 | +7.90 |
+| MaxPool1 | 244,943 | 2.44943 | +29 | +0.29 |
+| Conv2_1 | 246,391 | 2.46391 | +1,448 | +14.48 |
+| Conv2_2 | 247,735 | 2.47735 | +1,344 | +13.44 |
+| MaxPool2 | 247,812 | 2.47812 | +77 | +0.77 |
+| Conv3_1 | 250,963 | 2.50963 | +3,151 | +31.51 |
+| Conv3_2 | 253,282 | 2.53282 | +2,319 | +23.19 |
+| MaxPool3 | 253,281 | 2.53281 | -1 | -0.01 |
+| GlobalAvgPool | 253,350 | 2.53350 | +69 | +0.69 |
+| FC1 | 253,429 | 2.53429 | +79 | +0.79 |
+| FC2 | 253,444 | **2.53444** | +15 | +0.15 |
+
+### Block-Level Summary
+
+| Block | Final Stage | Completion Time | Additional Pipeline Tail |
+|---|---|---:|---:|
+| Conv Block 1 | MaxPool1 | 2.44943 ms | ~8.19 µs after Conv1_1 |
+| Conv Block 2 | MaxPool2 | 2.47812 ms | ~28.69 µs after Block 1 |
+| Conv Block 3 | MaxPool3 | 2.53281 ms | ~54.69 µs after Block 2 |
+| Classification Head | FC2 | **2.53444 ms** | ~1.63 µs after Block 3 |
+
+### Interpretation
+
+- The complete CNN streaming pipeline finishes after **253,444 cycles**, corresponding to approximately **2.534 ms** at 100 MHz.
+- Because the CNN uses HLS `DATAFLOW`, the reported timing of each layer represents its **completion point within overlapped execution**, not isolated computation latency.
+- The largest increases in the pipeline tail occur around:
+  - **Conv3_1:** +3,151 cycles
+  - **Conv3_2:** +2,319 cycles
+  - **Conv2_1:** +1,448 cycles
+  - **Conv2_2:** +1,344 cycles
+- **Conv Block 3** contributes the largest increase to the final pipeline completion time.
+- Pooling and fully connected stages contribute relatively little additional latency near the end of the pipeline.
+- `MaxPool3` is reported one cycle earlier than `Conv3_2`. This should be treated as effectively simultaneous completion due to DATAFLOW process timing and monitoring behavior rather than as MaxPool3 completing computation before Conv3_2.
+
+### Overall Pipeline Latency
+
+```text
+CNN Pipeline Start
+        ↓
+Conv Block 1
+        ↓
+Conv Block 2
+        ↓
+Conv Block 3
+        ↓
+Global Average Pooling
+        ↓
+FC1
+        ↓
+FC2
+        ↓
+253,444 cycles
+≈ 2.534 ms @ 100 MHz
+```
+
 ## 10. Future Work
 
 The next steps of the project include:
